@@ -1,8 +1,11 @@
 import test from 'ava'
 
-import { plus100 } from '../index'
+import { calculateKpiGrowth } from '../index'
 
-test('sync function from native code', (t) => {
-  const fixture = 42
-  t.is(plus100(fixture), fixture + 100)
+test('calculateKpiGrowth computes percent growth', (t) => {
+  t.is(calculateKpiGrowth(100, 50), 100)
+})
+
+test('calculateKpiGrowth returns 0 when previous is 0', (t) => {
+  t.is(calculateKpiGrowth(100, 0), 0)
 })
