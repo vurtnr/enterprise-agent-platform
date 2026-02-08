@@ -32,7 +32,6 @@ const props = defineProps<{
 const container = ref<HTMLElement | null>(null);
 const isReady = ref(false); // 🔥 控制 Loading/Canvas 切换
 let univerInstance: Univer | null = null;
-let workbook: any = null;
 
 const initUniver = async () => {
   if (!container.value) return;
@@ -108,7 +107,7 @@ const initUniver = async () => {
       locale: LocaleType.ZH_CN,
       ...rawData,
     };
-    workbook = univerInstance.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot);
+    univerInstance.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot);
     
     // 🔥 6. 延迟显示：给 Canvas 一点渲染时间，避免闪白
     setTimeout(() => {

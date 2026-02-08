@@ -35,7 +35,7 @@ const xyConfig = {
 };
 
 // 适配数据格式
-const computedData = computed(() => {
+const computedData = computed<any>(() => {
     if (props.type === "VueUiXy") {
         // VueUiXy 需要特定的 labels 和 series 结构，这里做简易适配
         return {
