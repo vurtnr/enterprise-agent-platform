@@ -30,21 +30,24 @@ const props = defineProps<{
 }>();
 
 const container = ref<HTMLElement | null>(null);
+const isReady = ref(false); // 🔥 控制 Loading/Canvas 切换
 let univerInstance: Univer | null = null;
 let workbook: any = null;
 
 const initUniver = async () => {
-  // 等待 DOM 渲染，避免高度为 0
-  await nextTick();
   if (!container.value) return;
 
-  // 清理旧实例
+  // 1. 重置状态
   if (univerInstance) {
     univerInstance.dispose();
     univerInstance = null;
   }
+  isReady.value = false; // 先显示骨架屏
 
-  // 1. 初始化实例
+  // 确保 DOM 准备好
+  await nextTick();
+
+  // 2. 初始化 Univer 实例
   univerInstance = new Univer({
     theme: defaultTheme,
     locale: LocaleType.ZH_CN,
@@ -53,7 +56,7 @@ const initUniver = async () => {
     }
   });
 
-  // 2. 注册插件
+  // 3. 注册插件
   univerInstance.registerPlugin(UniverRenderEnginePlugin);
   univerInstance.registerPlugin(UniverFormulaEnginePlugin);
   univerInstance.registerPlugin(UniverUIPlugin, {
@@ -67,39 +70,37 @@ const initUniver = async () => {
   univerInstance.registerPlugin(UniverSheetsUIPlugin);
   univerInstance.registerPlugin(UniverSheetsFormulaPlugin);
 
-  // 3. 🔥🔥🔥 核心修复：强力数据清洗 🔥🔥🔥
+  // 4. 🔥 数据清洗与补全 (防止白屏)
   const rawData = toRaw(props.data) || {};
   
-  // A. 确保 sheets 对象存在
+  // 确保 sheets 对象存在
   if (!rawData.sheets) rawData.sheets = {};
 
-  // B. 获取所有真实的 sheet keys
+  // 获取真实的 sheet keys
   const realSheetKeys = Object.keys(rawData.sheets);
 
-  // C. 如果没有任何 sheet，创建一个空的兜底，防止报错
+  // 兜底：如果没有任何 sheet
   if (realSheetKeys.length === 0) {
     const fallbackId = 'sheet-01';
     rawData.sheets[fallbackId] = { name: 'Sheet1' };
     realSheetKeys.push(fallbackId);
   }
 
-  // D. 重建 sheetOrder：强制使用真实的 Keys
-  // 不管后端传了什么错的 order，我们只信 sheets 里的 key
+  // 强制重建 sheetOrder，确保与 sheets key 一致
   rawData.sheetOrder = realSheetKeys;
 
-  // E. 补全默认属性 (行列数等)
+  // 补全默认属性
   realSheetKeys.forEach(key => {
     const sheet = rawData.sheets[key];
     if (!sheet.rowCount) sheet.rowCount = 20;
     if (!sheet.columnCount) sheet.columnCount = 20;
-    if (!sheet.id) sheet.id = key; // 确保内部 ID 一致
+    if (!sheet.id) sheet.id = key;
     if (!sheet.name) sheet.name = 'Data Sheet';
   });
 
-  // F. 确保 Workbook ID 存在
   if (!rawData.id) rawData.id = 'workbook-01';
 
-  // 4. 创建工作簿
+  // 5. 创建工作簿
   try {
     const snapshot = {
       appVersion: '3.0.0',
@@ -108,8 +109,14 @@ const initUniver = async () => {
       ...rawData,
     };
     workbook = univerInstance.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot);
+    
+    // 🔥 6. 延迟显示：给 Canvas 一点渲染时间，避免闪白
+    setTimeout(() => {
+      isReady.value = true;
+    }, 300);
+
   } catch (e) {
-    console.error("Univer Create Unit Error:", e);
+    console.error("Univer Init Error:", e);
   }
 };
 
@@ -129,17 +136,51 @@ watch(() => props.data, () => {
 </script>
 
 <template>
-  <div class="univer-wrapper-component flex flex-col w-full h-full bg-white text-black relative">
-    <div v-if="!data" class="absolute inset-0 flex items-center justify-center text-gray-400">
-      Loading Data...
+  <div class="univer-wrapper-component relative w-full h-[600px] bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col my-2 shadow-sm">
+    
+    <div 
+      v-if="!isReady" 
+      class="absolute inset-0 z-10 bg-slate-50 flex flex-col animate-pulse"
+    >
+      <div class="h-10 bg-slate-200 border-b border-slate-300 w-full mb-1"></div>
+      <div class="h-6 bg-slate-200 w-full mb-4 opacity-50"></div>
+
+      <div class="flex-1 p-4 space-y-4">
+        <div class="flex gap-4">
+           <div class="h-8 bg-slate-200 rounded w-20"></div>
+           <div class="h-8 bg-slate-200 rounded w-1/4"></div>
+           <div class="h-8 bg-slate-200 rounded w-1/4"></div>
+        </div>
+        <div class="h-8 bg-slate-200 rounded w-full opacity-80"></div>
+        <div class="h-8 bg-slate-200 rounded w-full opacity-60"></div>
+        <div class="h-8 bg-slate-200 rounded w-5/6 opacity-40"></div>
+      </div>
+      
+      <div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 font-medium bg-white/50 backdrop-blur-[1px]">
+        <svg class="animate-spin mb-3 h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>渲染 Excel 引擎中...</span>
+      </div>
     </div>
-    <div ref="container" class="flex-1 w-full h-full overflow-hidden"></div>
+
+    <div 
+      ref="container" 
+      class="flex-1 w-full h-full transition-opacity duration-500 ease-in-out"
+      :class="{ 'opacity-0': !isReady, 'opacity-100': isReady }"
+    ></div>
   </div>
 </template>
 
 <style scoped>
-/* 样式隔离 */
+/* 样式隔离：防止 Tailwind 全局样式影响 Univer 计算 */
 .univer-wrapper-component :deep(*) {
   box-sizing: border-box;
+}
+
+/* 确保 Canvas 正确显示 */
+.univer-wrapper-component :deep(canvas) {
+  display: block;
 }
 </style>
